@@ -180,8 +180,7 @@ void list_set_global_allocator(void *(*allocator)(size_t), void *(*reallocator)(
     _allocator.free    = deallocator;
 }
 
-List *new_list(const size_t item_size, void (*destructor)(void *))
-{
+List * new_list(const size_t item_size, void (*destructor)(void *)) {
     if (item_size == 0) {FAIL("item_size can't be 0!");}
 
     return _list_new(item_size, DEFAULT_CAPACITY, destructor);
