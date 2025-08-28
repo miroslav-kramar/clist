@@ -5,13 +5,13 @@
 int main() {
     list_set_global_allocator(salloc, srealloc, sfree);
 
-    List * l = new_list_int();
+    list_t * l = new_list_int();
 
     for (int i = 0; i < 20; i++) {
         list_push_int(l, i);
     }
 
-    for (size_t i = 0; i < list_length(l); i++) {
+    for (size_t i = 0; i < list_get_length(l); i++) {
         printf("%d ", list_read_int(l, i));
     }
     putchar('\n');
@@ -20,7 +20,7 @@ int main() {
     bitmap_dump();
     putchar('\n');
 
-    delete_list(l);
+    list_delete(l);
 
     heap_dump();
     bitmap_dump();

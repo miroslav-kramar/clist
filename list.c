@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdint.h>
 
 // -------
 // DEFINES
@@ -22,13 +23,13 @@ typedef struct Allocator {
     void   (*free)(void *);
 } Allocator;
 
-typedef struct List {
+typedef struct list_t {
     void * data;
     size_t capacity;
     size_t length;
     size_t item_size;
     void (*destructor)(void *);
-} List;
+} list_t;
 
 // ----------------
 // GLOBAL VARIABLES
@@ -91,8 +92,8 @@ Allocator _allocator = {.alloc = malloc, .realloc = realloc, .free = free};
 // HELPER FUNCTIONS
 // ----------------
 
-static List * _list_new(const size_t item_size, const size_t capacity, void (*destructor)(void *)) {
-    List * l = _allocator.alloc(sizeof(*l));
+static list_t * _list_new(const size_t item_size, const size_t capacity, void (*destructor)(void *)) {
+    list_t * l = _allocator.alloc(sizeof(*l));
     if (l == NULL) {goto ERR_LIST_ALLOC;}
     l->data = _allocator.alloc(capacity * item_size);
     if (l->data == NULL) {goto ERR_DATA_ALLOC;}
@@ -108,7 +109,7 @@ static List * _list_new(const size_t item_size, const size_t capacity, void (*de
     return NULL;
 }
 
-static bool _list_realloc(List * l, const size_t new_capacity) {
+static bool _list_realloc(list_t * l, const size_t new_capacity) {
     if (l->capacity == new_capacity) {return true;}
     void * new_data = _allocator.realloc(l->data, new_capacity * l->item_size);
     if (new_data == NULL) {return false;}
@@ -117,14 +118,14 @@ static bool _list_realloc(List * l, const size_t new_capacity) {
     return true;
 }
 
-static bool _list_grow(List * l) {
+static bool _list_grow(list_t * l) {
     if (l->length == l->capacity) {
         if (!_list_realloc(l, l->capacity * INCREASE_FACTOR)) {return false;}
     }
     return true;
 }
 
-static bool _list_shrink(List * l) {
+static bool _list_shrink(list_t * l) {
     const size_t quarter_capacity = l->capacity / 4;
     if (l->capacity > DEFAULT_CAPACITY && l->length < quarter_capacity) {
         const size_t new_capacity = (quarter_capacity > DEFAULT_CAPACITY) ? quarter_capacity : DEFAULT_CAPACITY;
@@ -133,23 +134,23 @@ static bool _list_shrink(List * l) {
     return true;
 }
 
-static inline unsigned char * _get_idx_ptr(const List *l, const size_t index) {
+static inline unsigned char * _get_idx_ptr(const list_t *l, const size_t index) {
     return (unsigned char *)l->data + index * l->item_size;
 }
 
-static inline unsigned char * _get_last_val_ptr(const List *l) {
+static inline unsigned char * _get_last_val_ptr(const list_t *l) {
     return (unsigned char *)l->data + (l->length - 1) * l->item_size;
 }
 
-static inline unsigned char * _get_last_idx_ptr(const List *l) {
+static inline unsigned char * _get_last_idx_ptr(const list_t *l) {
     return (unsigned char *)l->data + (l->capacity - 1) * l->item_size;
 }
 
-static inline unsigned char * _get_len_ptr(const List *l) {
+static inline unsigned char * _get_len_ptr(const list_t *l) {
     return (unsigned char *)l->data + l->length * l->item_size;
 }
 
-static inline unsigned char * _get_cap_ptr(const List *l) {
+static inline unsigned char * _get_cap_ptr(const list_t *l) {
     return (unsigned char *)l->data + l->capacity * l->item_size;
 }
 
@@ -157,16 +158,16 @@ static inline size_t _n_in_range(const size_t start, const size_t end) {
     return end - start + 1;
 }
 
-static List * _copy_range_list(const List * l, const size_t idx_start, const size_t idx_end) {
+static list_t * _copy_range_list(const list_t * l, const size_t idx_start, const size_t idx_end) {
     const size_t n = _n_in_range(idx_start, idx_end);
-    List * copy = _list_new(l->item_size, n, l->destructor);
+    list_t * copy = _list_new(l->item_size, n, l->destructor);
     if (copy == NULL) {return NULL;}
     memcpy(copy->data, _get_idx_ptr(l, idx_start), n * l->item_size);
     copy->length = n;
     return copy;
 }
 
-static void _copy_range_array(const List * l, void * out_array, const size_t idx_start, const size_t idx_end) {
+static void _copy_range_array(const list_t * l, void * out_array, const size_t idx_start, const size_t idx_end) {
     memcpy(out_array, _get_idx_ptr(l, idx_start), _n_in_range(idx_start, idx_end) * l->item_size);
 }
 
@@ -180,13 +181,13 @@ void list_set_global_allocator(void *(*allocator)(size_t), void *(*reallocator)(
     _allocator.free    = deallocator;
 }
 
-List * new_list(const size_t item_size, void (*destructor)(void *)) {
+list_t * list_new(const size_t item_size, void (*destructor)(void *)) {
     if (item_size == 0) {FAIL("item_size can't be 0!");}
 
     return _list_new(item_size, DEFAULT_CAPACITY, destructor);
 }
 
-void delete_list(List * l) {
+void list_delete(list_t * l) {
     if (l->destructor) {
         for (size_t i = 0; i < l->length; i++) {
             l->destructor(_get_idx_ptr(l, i));
@@ -196,23 +197,23 @@ void delete_list(List * l) {
     _allocator.free(l);
 }
 
-size_t list_length(const List * l) {
+size_t list_get_length(const list_t * l) {
     return l->length;
 }
 
-size_t list_capacity(const List * l) {
+size_t list_get_capacity(const list_t * l) {
     return l->capacity;
 }
 
-size_t list_item_size(const List * l) {
+size_t list_get_item_size(const list_t * l) {
     return l->item_size;
 }
 
-void (*list_destructor(const List * l))(void *) {
+void (*list_get_destructor(const list_t * l))(void *) {
     return l->destructor;
 }
 
-bool list_push(List * l, const void * data) {
+bool list_push(list_t * l, const void * data) {
     if (!_list_grow(l)) {return false;}
     void * ptr = _get_len_ptr(l);
     memcpy(ptr, data, l->item_size);
@@ -220,7 +221,7 @@ bool list_push(List * l, const void * data) {
     return true;
 }
 
-bool list_pop(List * l, void * out) {
+bool list_pop(list_t * l, void * out) {
     if (l->length == 0) {return true;}
 
     void * idx_ptr = _get_last_val_ptr(l);
@@ -233,13 +234,13 @@ bool list_pop(List * l, void * out) {
     return _list_shrink(l);
 }
 
-void list_read(const List * l, const size_t index, void * out) {
+void list_read(const list_t * l, const size_t index, void * out) {
     CHCK_BOUNDS(index, l->capacity);
     void * ptr = _get_idx_ptr(l, index);
     memcpy(out, ptr, l->item_size);
 }
 
-bool list_write(List * l, const size_t index, const void * data) {
+bool list_write(list_t * l, const size_t index, const void * data) {
     if (index >= l->capacity) {
         if (!_list_realloc(l, index + 1)) {return false;}
     }
@@ -251,15 +252,11 @@ bool list_write(List * l, const size_t index, const void * data) {
     return true;
 }
 
-void list_capacity_copy_array(const List * l, void * out_array) {
-    _copy_range_array(l, out_array, 0, l->capacity - 1);
-}
-
-void list_length_copy_array(const List * l, void * out_array) {
+void list_to_array(const list_t * l, void * out_array) {
     _copy_range_array(l, out_array, 0, l->length - 1);
 }
 
-void list_range_copy_array(const List * l, void * out_array, const size_t idx_start, const size_t idx_end) {
+void list_to_array_range(const list_t * l, void * out_array, const size_t idx_start, const size_t idx_end) {
     CHCK_BOUNDS_START(idx_start, l->capacity);
     CHCK_BOUNDS_END(idx_end, l->capacity);
     CHCK_IDX_RANGE(idx_start, idx_end);
@@ -267,34 +264,34 @@ void list_range_copy_array(const List * l, void * out_array, const size_t idx_st
     _copy_range_array(l, out_array, idx_start, idx_end);
 }
 
-void list_copy_count_array(const List * l, void * out_array, const size_t idx_start, const size_t count) {
+void list_to_array_count(const list_t * l, void * out_array, const size_t idx_start, const size_t count) {
     CHCK_BOUNDS(idx_start, l->capacity);
     const size_t idx_end = idx_start + count - 1;
     CHCK_COPY_COUNT(count, l->capacity, idx_start, idx_end);
     _copy_range_array(l, out_array, idx_start, idx_end);
 }
 
-List * list_copy(const List * l) {
+list_t * list_copy(const list_t * l) {
     return _copy_range_list(l, 0, l->length - 1);
 }
 
-List * list_range_copy(const List * l, const size_t idx_start, const size_t idx_end) {
+list_t * list_copy_range(const list_t * l, const size_t idx_start, const size_t idx_end) {
     if (idx_start > idx_end) {FAIL("Start index can't be larger than end index!");}
     return _copy_range_list(l, idx_start, idx_end);
 }
 
-List * list_copy_count(const List * l, const size_t idx_start, const size_t count) {
+list_t * list_copy_count(const list_t * l, const size_t idx_start, const size_t count) {
     CHCK_BOUNDS(idx_start, l->capacity);
     const size_t idx_end = idx_start + count - 1;
     CHCK_COPY_COUNT(count, l->capacity, idx_start, idx_end);
     return _copy_range_list(l, idx_start, idx_end);
 }
 
-List * list_join(const List * a, const List * b) {
+list_t * list_join(const list_t * a, const list_t * b) {
     CHCK_MATCHING_ITEM_SIZE(a->item_size, b->item_size);
     CHCK_MATCHING_DESTRUCTOR(a->destructor, b->destructor);
 
-    List * out = _list_new(a->item_size, a->length + b->length, a->destructor);
+    list_t * out = _list_new(a->item_size, a->length + b->length, a->destructor);
     if (out == NULL) {return NULL;}
     out->length = out->capacity;
     memcpy(out->data, a->data, a->length * out->item_size);
@@ -302,7 +299,7 @@ List * list_join(const List * a, const List * b) {
     return out;
 }
 
-bool list_append(List * dst, const List * src) {
+bool list_append(list_t * dst, const list_t * src) {
     CHCK_MATCHING_ITEM_SIZE(dst->item_size, src->item_size);
     CHCK_MATCHING_DESTRUCTOR(dst->destructor, src->destructor);
 
@@ -316,17 +313,18 @@ bool list_append(List * dst, const List * src) {
     return true;
 }
 
-bool list_append_array(List * l, void * data, size_t count) {
+bool list_append_array(list_t * l, const size_t count, const void * data) {
     if (count == 0) {return true;}
 
     if (l->capacity - l->length < count) {
         if (!_list_realloc(l, l->length + count)) {return false;}
     }
     memcpy(_get_len_ptr(l), data, count * l->item_size);
+    l->length += count;
     return true;
 }
 
-bool list_insert(List * l, const size_t index, const void * data) {
+bool list_insert(list_t * l, const size_t index, const void * data) {
     if (index >= l->length) {
         if (index >= l->capacity) {
             if (!_list_realloc(l, index + 1)) {return false;}
@@ -343,7 +341,7 @@ bool list_insert(List * l, const size_t index, const void * data) {
     return true;
 }
 
-bool list_erase(List * l, const size_t index, void * out) {
+bool list_erase(list_t * l, const size_t index, void * out) {
     CHCK_BOUNDS(index, l->capacity);
     unsigned char * idx_ptr = _get_idx_ptr(l, index);
     if (out != NULL) {
@@ -355,3 +353,49 @@ bool list_erase(List * l, const size_t index, void * out) {
     
     return _list_shrink(l);
 }
+
+// --------------------
+// TYPED API GENERATION
+// --------------------
+
+// type, name
+
+#define LIST_OF_TYPES \
+    X(bool,        bool) \
+    X(int8_t,      i8) \
+    X(int16_t,     i16) \
+    X(int32_t,     i32) \
+    X(int64_t,     i64) \
+    X(uint8_t,     u8) \
+    X(uint16_t,    u16) \
+    X(uint32_t,    u32) \
+    X(uint64_t,    u64) \
+    X(float,       flt) \
+    X(double,      dbl) \
+    X(long double, ldbl) \
+    X(void *,      vptr)
+
+#define X(type, name) \
+    list_t * list_new_##name () { \
+        return list_new(sizeof(type), NULL); \
+    } \
+    \
+    bool list_push_##name (list_t * l, const type data) { \
+        return list_push(l, (void *)&data); \
+    } \
+    \
+    type list_read_##name (list_t * l, const size_t index) { \
+        type out; \
+        list_read(l, index, (void *)&out); \
+        return out; \
+    } \
+    \
+    void list_write_##name (list_t * l, const size_t index, const type data) { \
+        list_write(l, index, (void *)&data); \
+    } \
+    \
+    bool list_insert_##name (list_t * l, const size_t index, const type data) { \
+        return list_insert(l, index, (void *)&data); \
+    }
+LIST_OF_TYPES
+#undef X
